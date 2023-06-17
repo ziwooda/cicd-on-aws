@@ -1,0 +1,39 @@
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+metadata:
+  name: jujy-eks-cluster
+  region: ap-northeast-2
+  version: "1.25"
+
+# availabilityZones: ["ap-northeast-2a", "ap-northeast-2c"]
+
+vpc:
+  id: vpc-0427ad884a52b11fc
+  subnets:
+    private:
+      ap-northeast-2a: { id: subnet-04f75bc0c5f7c0adf }
+      ap-northeast-2c: { id: subnet-099f222bbf0604780 }
+  nat:
+    gateway: Disable
+
+
+iam:
+  withOIDC: true # addons 설치를 위해 필요
+  serviceAccounts:
+  - metadata:
+      name: aws-load-balancer-controller
+      namespace: kube-system
+    wellKnownPolicies:
+      awsLoadBalancerController: true
+      autoScaler: true
+  
+fargateProfiles:
+  - name: jujy-fargate-profile
+    selectors:
+      - namespace: jujy
+        labels:
+          env: fargate
+
+cloudwatch:
+  clusterLogging:
+    enableTypes: ["*"]
