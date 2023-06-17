@@ -1,0 +1,39 @@
+version: 0.2
+
+phases:
+  pre_build:
+    on-failure: ABORT
+    commands:
+      - AWS_REGION=ap-northeast-2
+      - EKS_CLUSTER=jujy-eks-cluster
+      - curl -O https://s3.us-west-2.amazonaws.com/amazon-eks/1.25.9/2023-05-11/bin/linux/amd64/kubectl
+      - sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+      - chmod +x kubectl
+      - mkdir -p ~/.local/bin
+      - mv ./kubectl ~/.local/bin/kubectl
+      - aws eks --region $AWS_REGION update-kubeconfig --name $EKS_CLUSTER
+  pre_build:
+    on-failure: ABORT 
+    commands:
+      - echo ECR Login Phase
+      - aws ecr get-login-password --region $AWS_REGION | docker login --username $USER_NAME --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+      - REPO_URI=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$REPO_NAME
+      - COMMIT_HASH=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c 1-7)
+      - IMAGE_TAG=${COMMIT_HASH:=latest}
+      - IMAGE_NAME=$REPO_URI:$IMAGE_TAG
+  build:
+    on-failure: ABORT 
+    commands:
+      - echo Docker Build Phase
+      - docker build -t $REPO_NAME .
+      - docker tag $REPO_NAME $REPO_URI:$IMAGE_TAG
+  post_build:
+    commands:
+      - echo Docker Push Phase
+      - docker push $REPO_URI:$IMAGE_TAG
+      - echo Updating image version
+      - sed -i 's/IMAGE_NAME_ENV/IMAGE_NAME/g' eks-cluster/fargate-deploy.yaml
+      - echo Deploying eks components
+      - kubectl apply -f ./eks-cluster/fargate-deploy.yaml
+      - kubectl apply -f ./eks-cluster/eks-ingress.yaml
+      - kubectl apply -f ./eks-cluster/eks-service.yaml
